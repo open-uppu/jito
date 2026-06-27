@@ -1,0 +1,33 @@
+# jito build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+*.out
+
+# Secrets — NEVER commit
+.env
+.env.local
+*.env
+.jito/secrets/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+heartbeat/
+
+# Local config overrides
+config.local.yaml
