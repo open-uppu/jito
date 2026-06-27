@@ -14,6 +14,7 @@ var (
 )
 
 func main() {
+	cli.SetVersion(version, date)
 	root := cli.NewRootCmd(version, commit, date)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)

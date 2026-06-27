@@ -29,6 +29,10 @@ func NewRegistry(workDir string) *Registry {
 	r.Register(WriteTool{workDir: workDir})
 	r.Register(BashTool{workDir: workDir})
 	r.Register(ListTool{workDir: workDir})
+	r.Register(NewDiffTool(workDir))
+	r.Register(NewPatchTool(workDir))
+	r.Register(NewLogTool(workDir))
+	r.Register(NewWebSearchTool())
 	return r
 }
 

@@ -22,6 +22,8 @@ func Get(name string) (Mode, error) {
 		return Audit{}, nil
 	case "universal", "uni", "default":
 		return Universal{}, nil
+	case "plan":
+		return Plan{}, nil
 	default:
 		return nil, fmt.Errorf("unknown mode: %s (try dev|reason|create|audit|universal)", name)
 	}

@@ -42,6 +42,10 @@ Examples:
 	root.AddCommand(newVersionCmd(version, commit, date))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newHeartbeatCmd())
+	root.AddCommand(newCompletionCmd())
+	root.AddCommand(newUpdateCmd())
+	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newWorktreeCmd())
 
 	return root
 }
