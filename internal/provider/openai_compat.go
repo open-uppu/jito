@@ -1,107 +1,97 @@
 package provider
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"time"
+	"os"
+	"strings"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 // OpenAICompat implements an OpenAI-compatible HTTP provider (Minimax, OpenRouter, etc.)
+// using the official openai-go SDK for streaming + tool support.
 type OpenAICompat struct {
-	name    string
-	baseURL string
-	model   string
-	apiKey  string
-	http    *http.Client
+	name string
+	client *openai.Client
+	model string
 }
 
 // NewOpenAICompat creates a provider for any OpenAI-compatible endpoint.
 func NewOpenAICompat(name, baseURL, model, apiKey string) *OpenAICompat {
+	cfg := openai.DefaultConfig(apiKey)
+	if baseURL != "" {
+		cfg.BaseURL = baseURL
+	}
 	return &OpenAICompat{
-		name:    name,
-		baseURL: baseURL,
-		model:   model,
-		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 120 * time.Second},
+		name:   name,
+		client: openai.NewClientWithConfig(cfg),
+		model:  model,
 	}
 }
 
 func (p *OpenAICompat) Name() string { return p.name }
 
-type chatRequest struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
-}
-
-type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type chatResponse struct {
-	Choices []struct {
-		Message chatMessage `json:"message"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	} `json:"error,omitempty"`
-}
-
-// Chat calls the chat completions endpoint.
+// Chat calls the chat completions endpoint (non-streaming).
 func (p *OpenAICompat) Chat(ctx context.Context, system, user string) (string, error) {
-	reqBody := chatRequest{
+	resp, err := p.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: p.model,
-		Messages: []chatMessage{
+		Messages: []openai.ChatCompletionMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
-	}
-
-	body, err := json.Marshal(reqBody)
+	})
 	if err != nil {
-		return "", fmt.Errorf("marshal: %w", err)
+		return "", fmt.Errorf("chat: %w", err)
 	}
-
-	url := p.baseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
-
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("http: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read body: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("provider %s returned %d: %s", p.name, resp.StatusCode, string(respBody))
-	}
-
-	var parsed chatResponse
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return "", fmt.Errorf("unmarshal: %w (body: %s)", err, string(respBody))
-	}
-
-	if parsed.Error != nil {
-		return "", fmt.Errorf("provider error: %s (%s)", parsed.Error.Message, parsed.Error.Type)
-	}
-
-	if len(parsed.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices returned")
 	}
+	return resp.Choices[0].Message.Content, nil
+}
 
-	return parsed.Choices[0].Message.Content, nil
+// StreamChat streams chunks via callback.
+func (p *OpenAICompat) StreamChat(ctx context.Context, system, user string, onChunk func(string) error) error {
+	stream, err := p.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+		Model: p.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: user},
+		},
+		Stream: true,
+	})
+	if err != nil {
+		return fmt.Errorf("stream: %w", err)
+	}
+	defer stream.Close()
+
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if strings.Contains(err.Error(), "EOF") {
+				break
+			}
+			return err
+		}
+		if len(resp.Choices) > 0 {
+			chunk := resp.Choices[0].Delta.Content
+			if chunk != "" {
+				if err := onChunk(chunk); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// --- Env helpers (used by package main when wiring up) ---
+
+func envOrAny(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

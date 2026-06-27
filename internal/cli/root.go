@@ -35,6 +35,7 @@ Examples:
 	root.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	root.PersistentFlags().Bool("heartbeat", false, "enable 2-minute heartbeat log")
 	root.PersistentFlags().String("config", "", "config file path (default ~/.jito/config.yaml)")
+	root.PersistentFlags().String("store", "", "conversation store path (default ~/.jito/store.db)")
 
 	root.AddCommand(newChatCmd())
 	root.AddCommand(newRunCmd())

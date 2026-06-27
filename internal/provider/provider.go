@@ -13,6 +13,7 @@ import (
 type Provider interface {
 	Name() string
 	Chat(ctx context.Context, system, user string) (string, error)
+	StreamChat(ctx context.Context, system, user string, onChunk func(string) error) error
 }
 
 // NewFromConfig returns a provider based on config + env.
@@ -37,12 +38,14 @@ func NewFromConfig(modelOverride string) (Provider, error) {
 		if k := os.Getenv("MINIMAX_API_KEY"); k != "" {
 			apiKey = k
 		} else if k := os.Getenv("OPENAI_API_KEY"); k != "" {
-			// OpenAI-compatible endpoint, but model name needs adjustment
 			apiKey = k
 		}
 	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("no API key found (set %s or MINIMAX_API_KEY env var)", cfg.Provider.APIKeyEnv)
+	_ = apiKey // currently unused when fallback to mock
+
+	// If JITO_MOCK=1 or no API key found, use mock provider
+	if os.Getenv("JITO_MOCK") == "1" {
+		return NewMock("mock"), nil
 	}
 
 	model := cfg.Provider.Model
@@ -51,7 +54,12 @@ func NewFromConfig(modelOverride string) (Provider, error) {
 	}
 
 	switch strings.ToLower(cfg.Provider.Name) {
+	case "mock":
+		return NewMock("mock"), nil
 	case "minimax", "openai", "openai-compatible":
+		if apiKey == "" {
+			return nil, fmt.Errorf("no API key found (set %s or MINIMAX_API_KEY env var, or use JITO_MOCK=1)", cfg.Provider.APIKeyEnv)
+		}
 		return NewOpenAICompat(cfg.Provider.Name, cfg.Provider.BaseURL, model, apiKey), nil
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider.Name)
