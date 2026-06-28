@@ -1,0 +1,128 @@
+# .goreleaser.yml — jito v0.2.0 release pipeline
+#
+# Build matrix (per jito-rel spec §4):
+#   linux/amd64, linux/arm64
+#   darwin/amd64, darwin/arm64
+#   windows/amd64, windows/arm64
+#
+# Archive formats:
+#   tar.gz  (Unix)
+#   zip     (Windows)
+#
+# Changelog: auto-generated from conventional commits (feat, fix, merge,
+# docs, chore, refactor) and grouped into "Features", "Bug fixes", and
+# "Other changes". jito-rel NEVER publishes the release — the PM (main
+# session) handles `gh release create` after CEO human-gate approval.
+# See agents/jito-rel.md §4 hard rule #1: "Never push tag without CEO
+# approval."
+
+version: 2
+
+project_name: jito
+
+# The single binary to build. Other binaries can be added later by
+# extending this list.
+builds:
+  - id: jito
+    main: ./cmd/jito
+    binary: jito
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    ids:
+      - jito
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - CHANGELOG.md
+      - LICENSE*
+      - src: scripts/install.sh
+        dst: scripts
+      - src: .goreleaser.yml
+        dst: .
+
+# Changelog assembled from conventional-commit messages.
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+      - "^docs "
+      - "^test "
+      - "^chore: "
+      - "^ci: "
+      - "^style: "
+  groups:
+    - title: Features
+      order: 0
+      regexp: "^.*feat[(\\w)]*:+.*$"
+    - title: Bug fixes
+      order: 1
+      regexp: "^.*fix[(\\w)]*:+.*$"
+    - title: Other changes
+      order: 999
+      regexp: "^.*"
+
+# Release notes (drafted by goreleaser; the PM reviews + publishes).
+release:
+  draft: true                     # ALWAYS draft until CEO approves.
+  prerelease: auto                # auto-detect "rc"/"alpha"/"beta" suffixes.
+  name_template: "jito {{.Version}}"
+  header: |
+    ## jito {{.Version}}
+
+    Multi-mode AI agent CLI for the open-uppu Enterprise IT Master Blueprint.
+    See `CHANGELOG.md` for the full change set and `README.md` for usage.
+  footer: |
+    ## Human gate
+    This release was published by the **release engineer sub-agent**
+    (`jito-rel`) at the request of PM (main session). The `v0.2.0` tag
+    was approved by the CEO on 2026-06-28. The goreleaser draft was
+    turned into a public release by `gh release create` after the CEO
+    human gate.
+
+# Snap / Scoop are intentionally omitted — the open-uppu IT Master
+# Blueprint targets internal distribution only.
+
+# Default snapshot output (used by `goreleaser --snapshot` to verify
+# the build without publishing).
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Metadata injected into every archive's dist-info file.
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Disable features jito does not need.
+nfpms: []
+signs: []
