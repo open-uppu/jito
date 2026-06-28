@@ -39,6 +39,8 @@ Examples:
 
 	root.AddCommand(newChatCmd())
 	root.AddCommand(newRunCmd())
+	root.AddCommand(newResumeCmd())
+	root.AddCommand(newSessionsCmd())
 	root.AddCommand(newVersionCmd(version, commit, date))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newHeartbeatCmd())
