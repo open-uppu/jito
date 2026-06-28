@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/uppu/jito/internal/commands"
 	jitocontext "github.com/uppu/jito/internal/context"
 	"github.com/uppu/jito/internal/mode"
 	"github.com/uppu/jito/internal/provider"
@@ -31,18 +32,36 @@ func newChatCmd() *cobra.Command {
 				return err
 			}
 
+			cwd, _ := os.Getwd()
+
 			// Load JITO.md context on startup so the TUI footer can
 			// show the file count. Expose via env so the TUI model
 			// (which is constructed inside tui.Run) can pick it up
 			// without forcing a circular import on internal/cli.
 			// Done BEFORE store.Open so a store-open failure does not
 			// suppress the user-facing "context loaded" log line.
-			cwd, _ := os.Getwd()
 			if loader, lerr := jitocontext.NewLoader(cwd); lerr == nil {
 				if _, loadErr := loader.Load(); loadErr == nil {
 					fmt.Printf("[jito] context: %d files loaded\n", loader.Count())
 					_ = os.Setenv("JITO_CONTEXT_FILES", fmt.Sprintf("%d", loader.Count()))
 				}
+			}
+
+			// Load custom slash commands (LOOP #2).  Errors are
+			// non-fatal: the chat must still launch even if the user's
+			// TOML has a typo.
+			reg := commands.NewRegistry()
+			if errs := reg.LoadFromDirs(
+				commands.DefaultGlobalDir(),
+				commands.DefaultProjectDir(cwd),
+			); len(errs) > 0 {
+				fmt.Fprintf(os.Stderr, "[jito] commands: %d parse error(s)\n", len(errs))
+				for _, e := range errs {
+					fmt.Fprintf(os.Stderr, "  - %v\n", e)
+				}
+			}
+			if reg.Count() > 0 {
+				fmt.Printf("[jito] commands: %d loaded\n", reg.Count())
 			}
 
 			conv, err := store.Open(storePath)
@@ -51,7 +70,7 @@ func newChatCmd() *cobra.Command {
 			}
 			defer conv.Close()
 
-			return tui.Run(p, m, conv)
+			return tui.RunWith(p, m, conv, reg)
 		},
 	}
 }
