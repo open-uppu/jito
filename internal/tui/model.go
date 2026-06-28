@@ -54,6 +54,9 @@ type Model struct {
 	streaming bool
 	err       error
 	statusMsg string
+	// ctxCount is the number of JITO.md context files loaded; shown in
+	// the footer (gemini-cli analog). Zero means no loader attached.
+	ctxCount int
 }
 
 // NewModel constructs a new TUI model.
@@ -81,6 +84,10 @@ func NewModel(p provider.Provider, m mode.Mode, conv *store.Conversation) *Model
 func (m *Model) Init() tea.Cmd {
 	return textinput.Blink
 }
+
+// SetContextCount updates the context-file counter shown in the footer.
+// Callers wire this after building the Loader.
+func (m *Model) SetContextCount(n int) { m.ctxCount = n }
 
 // Update handles incoming messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -148,7 +155,21 @@ func (m *Model) View() string {
 	body := m.viewport.View()
 	input := fmt.Sprintf("> %s", m.input.View())
 	status := statusStyle.Render(m.statusMsg)
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, input, status)
+	footer := m.footerLine()
+	return lipgloss.JoinVertical(lipgloss.Left, header, body, input, status, footer)
+}
+
+// footerLine returns the context-count footer (gemini-cli analog).
+// Returns "" when ctxCount is zero (no loader attached) so the line is
+// suppressed rather than showing "0 context files loaded".
+func (m *Model) footerLine() string {
+	if m.ctxCount <= 0 {
+		return ""
+	}
+	if m.ctxCount == 1 {
+		return statusStyle.Render("📚 1 context file loaded")
+	}
+	return statusStyle.Render(fmt.Sprintf("📚 %d context files loaded", m.ctxCount))
 }
 
 // --- Internal helpers ---

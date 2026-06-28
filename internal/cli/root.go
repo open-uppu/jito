@@ -46,6 +46,7 @@ Examples:
 	root.AddCommand(newUpdateCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newWorktreeCmd())
+	root.AddCommand(newMemoryCmd())
 
 	return root
 }
