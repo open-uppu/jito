@@ -49,6 +49,8 @@ Examples:
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newWorktreeCmd())
 	root.AddCommand(newMemoryCmd())
+	root.AddCommand(newLoopCmd())
+	root.AddCommand(newSpawnCmd())
 
 	return root
 }

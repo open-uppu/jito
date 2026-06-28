@@ -18,7 +18,23 @@ type SpawnConfig struct {
 	Model   string            // model override
 	Bin     string            // explicit binary path (optional)
 	Env     map[string]string // extra env vars
+
+	// Heartbeat is an optional callback invoked at spawn-time
+	// (status="STARTED") and at wait-time ("DONE" on success,
+	// "BLOCKED" on failure). When non-nil, jito announces each
+	// sub-agent lifecycle event to the CEO-Profile Loop
+	// Engineering layer (see internal/loop). Defaults to nil
+	// (v0.1.0 no-op behaviour).
+	Heartbeat HeartbeatFunc
 }
+
+// HeartbeatFunc is the callback type used by SpawnConfig.Heartbeat.
+//
+// It receives a status keyword (one of "STARTED", "DONE", "BLOCKED")
+// and a free-form detail line. Implementations should be non-blocking
+// and best-effort — a slow heartbeat must not delay sub-agent
+// shutdown.
+type HeartbeatFunc func(status, detail string)
 
 // SubAgent is a running sub-agent process.
 type SubAgent struct {
@@ -27,6 +43,7 @@ type SubAgent struct {
 	stdout  *bytes.Buffer
 	stderr  *bytes.Buffer
 	workDir string
+	beat    HeartbeatFunc
 }
 
 // Spawn starts a new jito sub-agent in a separate process.
@@ -88,12 +105,18 @@ func Spawn(ctx context.Context, cfg SpawnConfig) (*SubAgent, error) {
 		return nil, fmt.Errorf("spawn %s: %w", cfg.Name, err)
 	}
 
+	if cfg.Heartbeat != nil {
+		cfg.Heartbeat("STARTED child-spawned", fmt.Sprintf("subagent %s pid=%d dir=%s mode=%s",
+			cfg.Name, cmd.Process.Pid, cfg.WorkDir, cfg.Mode))
+	}
+
 	return &SubAgent{
 		Name:    cfg.Name,
 		cmd:     cmd,
 		stdout:  stdout,
 		stderr:  stderr,
 		workDir: cfg.WorkDir,
+		beat:    cfg.Heartbeat,
 	}, nil
 }
 
@@ -103,7 +126,15 @@ func (s *SubAgent) Wait() (string, error) {
 	out := s.stdout.String()
 	if err != nil {
 		out += "\n[stderr]\n" + s.stderr.String()
+		if s.beat != nil {
+			s.beat("BLOCKED child-failed", fmt.Sprintf("subagent %s pid=%d err=%v",
+				s.Name, s.PID(), err))
+		}
 		return out, fmt.Errorf("subagent %s: %w", s.Name, err)
+	}
+	if s.beat != nil {
+		s.beat("DONE child-exited", fmt.Sprintf("subagent %s pid=%d output=%dB",
+			s.Name, s.PID(), len(out)))
 	}
 	return strings.TrimSpace(out), nil
 }
