@@ -19,11 +19,13 @@ func TestApprover_Decide_Allowed(t *testing.T) {
 
 func TestApprover_Decide_Prompt(t *testing.T) {
 	a := NewApprover(NewPolicy(), nil)
-	d, req := a.Decide(ModeDev, "rm -rf /")
+	// "python test.py" is not on the dev allowlist, so it triggers
+	// DecisionPrompt without being hard-denied.
+	d, req := a.Decide(ModeDev, "python test.py")
 	assert.Equal(t, DecisionPrompt, d)
 	require.NotNil(t, req)
 	assert.Equal(t, ModeDev, req.Mode)
-	assert.Equal(t, "rm -rf /", req.Command)
+	assert.Equal(t, "python test.py", req.Command)
 }
 
 func TestApprover_Decide_Deny(t *testing.T) {

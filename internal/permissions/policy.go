@@ -183,15 +183,35 @@ func (p *Policy) allowlist(mode Mode) []string {
 
 // Check inspects a single bash command and returns the decision.  The
 // command is the raw shell string the user (or LLM) wants to run.
+//
+// Decision order (first match wins):
+//
+//  1. Empty command     → DecisionDeny
+//  2. Network command   → DecisionDeny (LOOP #3)
+//  3. Dangerous command → DecisionDeny (LOOP #3, e.g. sudo, eval,
+//     curl|sh, $(...), | bash)
+//  4. Deny list         → DecisionDeny
+//  5. Allow list match  → DecisionAllow
+//  6. Empty allowlist   → DecisionPrompt
+//  7. Default           → DecisionPrompt
 func (p *Policy) Check(mode Mode, command string) Decision {
 	cmd := strings.TrimSpace(command)
 	if cmd == "" {
 		return DecisionDeny
 	}
+	// Hard-deny network egress and dangerous commands regardless of
+	// mode or override file (LOOP #3 hardening).
+	if HasNetworkCommand(cmd) {
+		return DecisionDeny
+	}
+	if IsDangerousCommand(cmd) {
+		return DecisionDeny
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Deny list wins first.
+	// Deny list wins next.
 	if denied, ok := p.denyList[mode]; ok {
 		for _, d := range denied {
 			if matches(cmd, d) {
